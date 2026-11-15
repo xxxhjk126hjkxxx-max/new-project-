@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <aside class="sidebar">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
+      <span>IUA</span>
+    </div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
+      <a href="{{ url_for('students') }}" class="nav-item active">إدارة الطلاب</a>
+      <a href="{{ url_for('lectures') }}" class="nav-item">المحاضرات</a>
+      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
+      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
+    </nav>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <h2>إدارة الطلاب</h2>
+      </div>
+      <div class="admin-tag">{{ session.get('username') }}</div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <section class="panel add-form-panel">
+      <h3>إضافة طالب جديد</h3>
+      <form method="post" class="student-form">
+        <input type="hidden" name="action" value="create" />
+        <div class="field-grid">
+          <label>
+            <span>اسم الطالب</span>
+            <input type="text" name="name" required />
+          </label>
+          <label>
+            <span>رقم الطالب</span>
+            <input type="text" name="student_number" required />
+          </label>
+          <label>
+            <span>الصف / المجموعة</span>
+            <input type="text" name="grade_group" required />
+          </label>
+        </div>
+        <button type="submit">إضافة الطالب</button>
+      </form>
+    </section>
+
+    <section class="panel table-panel">
+      <h3>قائمة الطلاب</h3>
+      {% if students %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الطالب</th>
+              <th>رقم الطالب</th>
+              <th>الصف / المجموعة</th>
+              <th>QR</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+            <tr>
+              <td>{{ student.name }}</td>
+              <td>{{ student.student_number }}</td>
+              <td>{{ student.grade_group }}</td>
+              <td>
+                <a href="{{ url_for('student_qr', student_id=student.id) }}" class="mini-btn">عرض QR</a>
+              </td>
+              <td>
+                <div class="inline-actions">
+                  <form method="post">
+                    <input type="hidden" name="action" value="delete" />
+                    <input type="hidden" name="student_id" value="{{ student.id }}" />
+                    <button type="submit" class="danger-btn">حذف</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p>لا يوجد طلاب مضافين بعد.</p>
+      {% endif %}
+    </section>
+  </main>
+</div>
+{% endblock %}

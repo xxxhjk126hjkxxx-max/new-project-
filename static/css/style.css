@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <aside class="sidebar">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
+      <span>IUA</span>
+    </div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
+      <a href="{{ url_for('students') }}" class="nav-item">إدارة الطلاب</a>
+      <a href="{{ url_for('lectures') }}" class="nav-item">المحاضرات</a>
+      <a href="{{ url_for('reports') }}" class="nav-item active">تقارير الحضور</a>
+      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
+    </nav>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <h2>تقارير الحضور</h2>
+      </div>
+      <div class="admin-tag">{{ session.get('username') }}</div>
+    </header>
+
+    <section class="panel filter-panel">
+      <form method="get">
+        <label>
+          <span>اختر المحاضرة</span>
+          <select name="lecture_id" onchange="this.form.submit()">
+            <option value="">اختر محاضرة</option>
+            {% for lecture in lectures %}
+              <option value="{{ lecture.id }}" {% if selected and selected.id == lecture.id %}selected{% endif %}>{{ lecture.name }} - {{ lecture.lecture_date }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+    </section>
+
+    {% if selected %}
+    <section class="panel export-panel">
+      <a href="{{ url_for('export_excel', lecture_id=selected.id) }}" class="button-link">تصدير إلى Excel</a>
+    </section>
+
+    <section class="panel table-panel">
+      <h3>الحاضرون</h3>
+      {% if present %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الطالب</th>
+              <th>رقم الطالب</th>
+              <th>الصف / المجموعة</th>
+              <th>تاريخ الحضور</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in present %}
+            <tr>
+              <td>{{ student.name }}</td>
+              <td>{{ student.student_number }}</td>
+              <td>{{ student.grade_group }}</td>
+              <td>{{ student.checked_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p>لا يوجد حاضرون بعد.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel table-panel">
+      <h3>الغائبون</h3>
+      {% if absent %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>اسم الطالب</th>
+              <th>رقم الطالب</th>
+              <th>الصف / المجموعة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in absent %}
+            <tr>
+              <td>{{ student.name }}</td>
+              <td>{{ student.student_number }}</td>
+              <td>{{ student.grade_group }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p>لا يوجد غائبون.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

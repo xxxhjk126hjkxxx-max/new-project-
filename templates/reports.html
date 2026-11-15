@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <aside class="sidebar">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
+      <span>IUA</span>
+    </div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
+      <a href="{{ url_for('students') }}" class="nav-item">إدارة الطلاب</a>
+      <a href="{{ url_for('lectures') }}" class="nav-item active">المحاضرات</a>
+      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
+      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
+    </nav>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <h2>مسح حضور: {{ lecture.name }}</h2>
+      </div>
+      <div class="admin-tag">{{ session.get('username') }}</div>
+    </header>
+
+    <section class="panel scanner-panel">
+      <div id="scanner-status" class="scanner-status" aria-live="polite">جاهز لمسح الكود</div>
+      <div id="reader" class="reader-area"></div>
+      <div class="scanner-actions">
+        <a href="{{ url_for('reports', lecture_id=lecture.id) }}" class="button-link secondary">عرض التقرير</a>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  const lectureId = {{ lecture.id }};
+  const statusBox = document.getElementById('scanner-status');
+
+  function showStatus(message, type = 'info') {
+    statusBox.textContent = message;
+    statusBox.className = 'scanner-status ' + type;
+  }
+
+  function onScanSuccess(decodedText, decodedResult) {
+    fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lecture_id: lectureId, qr_data: decodedText })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showStatus(data.message, 'success');
+      } else {
+        showStatus(data.message, 'error');
+      }
+    })
+    .catch(() => {
+      showStatus('حدث خطأ أثناء تسجيل الحضور', 'error');
+    });
+  }
+
+  const html5QrCode = new Html5Qrcode("reader");
+  const config = { fps: 10, qrbox: { width: 280, height: 280 } };
+
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      const cameraId = cameras[0].id;
+      html5QrCode.start(
+        cameraId,
+        config,
+        onScanSuccess,
+        (errorMessage) => {
+          console.log(errorMessage);
+        }
+      ).catch(() => {
+        showStatus('تعذر فتح الكاميرا، تأكد من الإذن', 'error');
+      });
+    } else {
+      showStatus('لا توجد كاميرا متاحة في هذا الجهاز', 'error');
+    }
+  }).catch(() => {
+    showStatus('تعذر الوصول إلى الكاميرات', 'error');
+  });
+</script>
+{% endblock %}

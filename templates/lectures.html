@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <aside class="sidebar">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
+      <span>IUA</span>
+    </div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
+      <a href="{{ url_for('students') }}" class="nav-item active">إدارة الطلاب</a>
+      <a href="{{ url_for('lectures') }}" class="nav-item">المحاضرات</a>
+      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
+      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
+    </nav>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <h2>رمز الطالب</h2>
+      </div>
+      <div class="admin-tag">{{ session.get('username') }}</div>
+    </header>
+
+    <section class="panel qr-panel">
+      <h3>{{ student.name }}</h3>
+      <p>رقم الطالب: {{ student.student_number }}</p>
+      <p>الصف / المجموعة: {{ student.grade_group }}</p>
+
+      <div class="qr-box">
+        <img src="{{ qr_url }}" alt="QR code" />
+      </div>
+
+      <div class="qr-actions">
+        <a class="button-link" href="{{ url_for('download_qr', student_id=student.id) }}">تحميل الصورة</a>
+        <a class="button-link secondary" href="{{ url_for('students') }}">العودة</a>
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}

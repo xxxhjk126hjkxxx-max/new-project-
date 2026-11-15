@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <aside class="sidebar">
+    <div class="brand-mini">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
+      <span>IUA</span>
+    </div>
+
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="nav-item active">الرئيسية</a>
+      <a href="{{ url_for('students') }}" class="nav-item">إدارة الطلاب</a>
+      <a href="{{ url_for('lectures') }}" class="nav-item">المحاضرات</a>
+      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
+      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
+    </nav>
+  </aside>
+
+  <main class="main-panel">
+    <header class="topbar">
+      <div>
+        <h2>لوحة التحكم</h2>
+      </div>
+      <div class="admin-tag">{{ session.get('username') }}</div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <section class="stats-grid">
+      <div class="stat-card">
+        <span>إجمالي الطلاب</span>
+        <strong>{{ stats.total_students }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>إجمالي المحاضرات</span>
+        <strong>{{ stats.total_lectures }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>إجمالي الحضور</span>
+        <strong>{{ stats.total_attendance }}</strong>
+      </div>
+    </section>
+
+    <section class="cards-row">
+      <div class="panel">
+        <h3>آخر المحاضرات</h3>
+        {% if lectures %}
+          <ul class="list-simple">
+            {% for lecture in lectures %}
+              <li>
+                <div>
+                  <strong>{{ lecture.name }}</strong>
+                  <small>{{ lecture.lecture_date }} - {{ lecture.lecture_time }}</small>
+                </div>
+                <a href="{{ url_for('attendance_page', lecture_id=lecture.id) }}">فتح المسح</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>لا توجد محاضرات حتى الآن.</p>
+        {% endif %}
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}

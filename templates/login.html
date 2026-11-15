@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="brand-wrap">
+      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" class="brand-logo" />
+      <h1>نظام حضور الطلاب</h1>
+      <p>لوحة الإدارة</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" class="auth-form">
+      <label>
+        <span>اسم المستخدم</span>
+        <input type="text" name="username" placeholder="admin" required />
+      </label>
+      <label>
+        <span>كلمة المرور</span>
+        <input type="password" name="password" placeholder="********" required />
+      </label>
+      <button type="submit">دخول</button>
+    </form>
+
+    <div class="login-note">
+      <strong>بيانات الدخول الافتراضية:</strong>
+      <div>المستخدم: admin</div>
+      <div>كلمة المرور: admin123</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
