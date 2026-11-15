@@ -1,43 +1,7 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<div class="dashboard-shell">
-  <aside class="sidebar">
-    <div class="brand-mini">
-      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
-      <span>IUA</span>
-    </div>
-    <nav class="nav">
-      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
-      <a href="{{ url_for('students') }}" class="nav-item active">إدارة الطلاب</a>
-      <a href="{{ url_for('lectures') }}" class="nav-item">المحاضرات</a>
-      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
-      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
-    </nav>
-  </aside>
-
-  <main class="main-panel">
-    <header class="topbar">
-      <div>
-        <h2>رمز الطالب</h2>
-      </div>
-      <div class="admin-tag">{{ session.get('username') }}</div>
-    </header>
-
-    <section class="panel qr-panel">
-      <h3>{{ student.name }}</h3>
-      <p>رقم الطالب: {{ student.student_number }}</p>
-      <p>الصف / المجموعة: {{ student.grade_group }}</p>
-
-      <div class="qr-box">
-        <img src="{{ qr_url }}" alt="QR code" />
-      </div>
-
-      <div class="qr-actions">
-        <a class="button-link" href="{{ url_for('download_qr', student_id=student.id) }}">تحميل الصورة</a>
-        <a class="button-link secondary" href="{{ url_for('students') }}">العودة</a>
-      </div>
-    </section>
-  </main>
-</div>
+<div class="app-layout"><aside class="sidebar"><a class="brand" href="{{ url_for('dashboard') }}"><img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA"><span><b>IUA</b><small>الحضور الأكاديمي</small></span></a><nav><a class="nav-link" href="{{ url_for('dashboard') }}">الرئيسية</a><a class="nav-link" href="{{ url_for('students') }}">إدارة الطلاب</a><a class="nav-link active" href="{{ url_for('lectures') }}">المحاضرات</a><a class="nav-link" href="{{ url_for('reports') }}">تقارير الحضور</a></nav><form class="logout-form" method="post" action="{{ url_for('logout') }}"><button class="nav-link logout" type="submit">تسجيل الخروج</button></form><div class="sidebar-caption">جامعة أفريقيا الدولية</div></aside>
+<main class="main-content"><header class="topbar"><div><p class="eyebrow">الجداول الدراسية</p><h1>المحاضرات</h1></div></header>{% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+<section class="panel"><div class="panel-heading"><div><p class="eyebrow">جلسة جديدة</p><h2>إنشاء محاضرة</h2></div></div><form method="post" class="form-grid"><label>اسم المحاضرة<input name="name" required></label><label>التاريخ<input type="date" name="lecture_date" required></label><label>الوقت<input type="time" name="lecture_time" required></label><button class="button primary align-end" type="submit">حفظ المحاضرة</button></form></section>
+<section class="panel"><div class="panel-heading"><div><p class="eyebrow">المواعيد</p><h2>قائمة المحاضرات</h2></div></div>{% if lectures %}<div class="table-scroll"><table><thead><tr><th>المحاضرة</th><th>التاريخ</th><th>الوقت</th><th>الإجراء</th></tr></thead><tbody>{% for lecture in lectures %}<tr><td><strong>{{ lecture.name }}</strong></td><td>{{ lecture.lecture_date }}</td><td>{{ lecture.lecture_time }}</td><td><a class="button small primary" href="{{ url_for('attendance_page', lecture_id=lecture.id) }}">مسح الحضور</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">لا توجد محاضرات حتى الآن.</p>{% endif %}</section></main></div>
 {% endblock %}

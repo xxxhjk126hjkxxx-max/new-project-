@@ -1,89 +1,14 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<div class="dashboard-shell">
-  <aside class="sidebar">
-    <div class="brand-mini">
-      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" />
-      <span>IUA</span>
-    </div>
-    <nav class="nav">
-      <a href="{{ url_for('dashboard') }}" class="nav-item">الرئيسية</a>
-      <a href="{{ url_for('students') }}" class="nav-item">إدارة الطلاب</a>
-      <a href="{{ url_for('lectures') }}" class="nav-item active">المحاضرات</a>
-      <a href="{{ url_for('reports') }}" class="nav-item">تقارير الحضور</a>
-      <a href="{{ url_for('logout') }}" class="nav-item logout">تسجيل الخروج</a>
-    </nav>
-  </aside>
-
-  <main class="main-panel">
-    <header class="topbar">
-      <div>
-        <h2>المحاضرات</h2>
-      </div>
-      <div class="admin-tag">{{ session.get('username') }}</div>
-    </header>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <section class="panel add-form-panel">
-      <h3>إنشاء محاضرة جديدة</h3>
-      <form method="post" class="student-form">
-        <div class="field-grid">
-          <label>
-            <span>اسم المحاضرة</span>
-            <input type="text" name="name" required />
-          </label>
-          <label>
-            <span>التاريخ</span>
-            <input type="date" name="lecture_date" required />
-          </label>
-          <label>
-            <span>الوقت</span>
-            <input type="time" name="lecture_time" required />
-          </label>
-        </div>
-        <button type="submit">حفظ المحاضرة</button>
-      </form>
-    </section>
-
-    <section class="panel table-panel">
-      <h3>قائمة المحاضرات</h3>
-      {% if lectures %}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>اسم المحاضرة</th>
-              <th>التاريخ</th>
-              <th>الوقت</th>
-              <th>مسح الحضور</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for lecture in lectures %}
-            <tr>
-              <td>{{ lecture.name }}</td>
-              <td>{{ lecture.lecture_date }}</td>
-              <td>{{ lecture.lecture_time }}</td>
-              <td>
-                <a href="{{ url_for('attendance_page', lecture_id=lecture.id) }}" class="mini-btn">فتح المسح</a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-        <p>لا توجد محاضرات حتى الآن.</p>
-      {% endif %}
-    </section>
-  </main>
-</div>
+<div class="app-layout"><aside class="sidebar"><a class="brand" href="{{ url_for('dashboard') }}"><img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA"><span><b>IUA</b><small>الحضور الأكاديمي</small></span></a><nav><a class="nav-link" href="{{ url_for('dashboard') }}">الرئيسية</a><a class="nav-link" href="{{ url_for('students') }}">إدارة الطلاب</a><a class="nav-link active" href="{{ url_for('lectures') }}">المحاضرات</a><a class="nav-link" href="{{ url_for('reports') }}">تقارير الحضور</a></nav><form class="logout-form" method="post" action="{{ url_for('logout') }}"><button class="nav-link logout" type="submit">تسجيل الخروج</button></form><div class="sidebar-caption">جامعة أفريقيا الدولية</div></aside>
+<main class="main-content"><header class="topbar"><div><p class="eyebrow">{{ lecture.lecture_date }} · {{ lecture.lecture_time }}</p><h1>تسجيل الحضور</h1><p class="muted">{{ lecture.name }}</p></div><a class="button secondary" href="{{ url_for('reports', lecture_id=lecture.id) }}">التقرير</a></header><section class="panel scanner-panel"><div class="scanner-intro"><span class="scanner-icon">⌗</span><h2>وجّه الكاميرا إلى رمز الطالب</h2><p class="muted">قد يطلب المتصفح إذناً لاستخدام الكاميرا. يعمل المسح عبر HTTPS عند النشر.</p></div><div id="scanner-status" class="scanner-status" role="status" aria-live="polite">جارٍ تجهيز الكاميرا…</div><div id="reader"></div><button id="start-camera" class="button primary" type="button" hidden>تشغيل الكاميرا</button><div class="manual-entry"><label for="manual-number">إدخال رقم الطالب يدوياً</label><div class="manual-row"><input id="manual-number" placeholder="رقم الطالب"><button id="manual-submit" class="button secondary" type="button">تسجيل الحضور</button></div></div><div class="scan-result" id="scan-result" aria-live="polite"></div></section></main></div>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const lectureId={{ lecture.id|tojson }};const statusBox=document.getElementById('scanner-status');const resultBox=document.getElementById('scan-result');let scanner=null;let busy=false;
+function status(text,type=''){statusBox.textContent=text;statusBox.className='scanner-status '+type;}
+async function recordAttendance(raw){if(busy)return;busy=true;try{const response=await fetch('{{ url_for("api_scan") }}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lecture_id:lectureId,qr_data:raw})});const data=await response.json();resultBox.textContent=data.message;resultBox.className='scan-result '+(data.success?'success':'error');status(data.message,data.success?'success':'error');if(data.success){if(navigator.vibrate)navigator.vibrate(100);setTimeout(()=>{if(scanner)scanner.resume();busy=false;},1300);}else{setTimeout(()=>{if(scanner)scanner.resume();busy=false;},1700);}}catch(e){status('تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مجدداً.','error');busy=false;if(scanner)scanner.resume();}}
+function onScan(decodedText){if(scanner)scanner.pause(true);recordAttendance(decodedText);}
+async function startCamera(){if(!window.Html5Qrcode){status('تعذر تحميل قارئ QR. تحقق من اتصال الإنترنت.','error');return;}try{scanner=new Html5Qrcode('reader');const cameras=await Html5Qrcode.getCameras();if(!cameras.length){status('لم نعثر على كاميرا في هذا الجهاز.','error');return;}const camera=cameras.find(c=>/back|rear|environment/i.test(c.label))||cameras[0];await scanner.start(camera.id,{fps:10,qrbox:{width:250,height:250}},onScan,()=>{});status('الكاميرا جاهزة — امسح رمز الطالب');document.getElementById('start-camera').hidden=true;}catch(e){status('لم نتمكن من تشغيل الكاميرا. اسمح للمتصفح باستخدامها أو استخدم الإدخال اليدوي.','error');document.getElementById('start-camera').hidden=false;}}
+document.getElementById('start-camera').addEventListener('click',startCamera);document.getElementById('manual-submit').addEventListener('click',()=>{const input=document.getElementById('manual-number');if(input.value.trim())recordAttendance('student_id:'+input.value.trim());});document.getElementById('manual-number').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('manual-submit').click();});startCamera();
+</script>
 {% endblock %}

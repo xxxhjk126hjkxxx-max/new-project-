@@ -3,230 +3,147 @@ from __future__ import annotations
 import io
 import os
 import sqlite3
-from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from typing import Any
 
 import qrcode
-from flask import (
-    Flask,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    send_file,
-    session,
-    url_for,
-)
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from openpyxl import Workbook
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "change-this-secret-key")
+app.config.update(
+    SECRET_KEY=os.getenv("SECRET_KEY", "dev-only-change-this-secret"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+)
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "attendance.db"
+DB_PATH = Path(os.getenv("DATABASE_PATH", str(BASE_DIR / "attendance.db")))
 QR_DIR = BASE_DIR / "static" / "qr"
-QR_DIR.mkdir(exist_ok=True, parents=True)
-
+QR_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 
-def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+def get_db():
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
-def init_db() -> None:
-    conn = get_db()
-    conn.execute(
-        """
+def init_db():
+    with get_db() as conn:
+        conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.execute(
-        """
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_number TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            grade_group TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.execute(
-        """
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_number TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          grade_group TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS lectures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            lecture_date TEXT NOT NULL,
-            lecture_time TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    conn.execute(
-        """
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          lecture_date TEXT NOT NULL,
+          lecture_time TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lecture_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(lecture_id, student_id),
-            FOREIGN KEY (lecture_id) REFERENCES lectures(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
-
-
-def ensure_admin_user() -> None:
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE username = ?", (ADMIN_USERNAME,)).fetchone()
-    if user is None:
-        conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)),
-        )
-        conn.commit()
-    conn.close()
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lecture_id INTEGER NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+          student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(lecture_id, student_id)
+        );
+        """)
+        user = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
+        if user is None:
+            conn.execute("INSERT INTO users(username,password_hash) VALUES(?,?)",
+                         (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)))
 
 
 def login_required(view):
+    @wraps(view)
     def wrapped(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"))
         return view(*args, **kwargs)
-
-    wrapped.__name__ = view.__name__
     return wrapped
 
 
+def student_qr_path(student_id: int) -> Path:
+    return QR_DIR / f"{student_id}.png"
+
+
 def generate_student_qr(student_id: int, student_number: str) -> str:
-    qr_path = QR_DIR / f"{student_id}.png"
-    if not qr_path.exists():
-        payload = f"student_id:{student_number}"
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(payload)
+    path = student_qr_path(student_id)
+    if not path.exists():
+        qr = qrcode.QRCode(box_size=10, border=4)
+        qr.add_data(f"student_id:{student_number}")
         qr.make(fit=True)
-        image = qr.make_image(fill_color="#0d3b66", back_color="white")
-        image.save(qr_path)
-    return f"/static/qr/{student_id}.png"
+        qr.make_image(fill_color="#103b70", back_color="white").save(path)
+    return url_for("static", filename=f"qr/{student_id}.png")
 
 
-def parse_qr_payload(payload: str) -> str | None:
+def student_number_from_qr(payload: str) -> str | None:
     value = (payload or "").strip()
-    if not value:
-        return None
     if value.lower().startswith("student_id:"):
-        return value.split(":", 1)[1].strip()
-    if value.isdigit():
-        return value
-    return None
-
-
-def fetch_student_by_number(student_number: str):
-    conn = get_db()
-    student = conn.execute(
-        "SELECT * FROM students WHERE student_number = ?",
-        (student_number,),
-    ).fetchone()
-    conn.close()
-    return student
-
-
-def fetch_dashboard_stats():
-    conn = get_db()
-    total_students = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
-    total_lectures = conn.execute("SELECT COUNT(*) FROM lectures").fetchone()[0]
-    total_attendance = conn.execute("SELECT COUNT(*) FROM attendance").fetchone()[0]
-    latest = conn.execute(
-        "SELECT COUNT(*) FROM students s LEFT JOIN attendance a ON a.student_id = s.id WHERE a.id IS NOT NULL"
-    ).fetchone()[0]
-    conn.close()
-    return {
-        "total_students": total_students,
-        "total_lectures": total_lectures,
-        "total_attendance": total_attendance,
-        "attendance_rows": latest,
-    }
-
-
-def get_lecture_summary(lecture_id: int):
-    conn = get_db()
-    lecture = conn.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    present = conn.execute(
-        """
-        SELECT s.*
-        FROM attendance a
-        JOIN students s ON s.id = a.student_id
-        WHERE a.lecture_id = ?
-        ORDER BY s.name ASC
-        """,
-        (lecture_id,),
-    ).fetchall()
-    all_students = conn.execute("SELECT * FROM students ORDER BY name ASC").fetchall()
-    conn.close()
-    present_ids = {row["id"] for row in present}
-    absent = [s for s in all_students if s["id"] not in present_ids]
-    return lecture, present, absent
+        value = value.split(":", 1)[1].strip()
+    return value or None
 
 
 @app.before_request
 def bootstrap():
     init_db()
-    ensure_admin_user()
+
+
+@app.route("/")
+def index():
+    return redirect(url_for("dashboard" if session.get("user_id") else "login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
-        conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        conn.close()
-
+        with get_db() as conn:
+            user = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
         if user and check_password_hash(user["password_hash"], password):
+            session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
-            flash("تم تسجيل الدخول بنجاح", "success")
             return redirect(url_for("dashboard"))
-
         flash("اسم المستخدم أو كلمة المرور غير صحيحة", "error")
-
     return render_template("login.html")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
-@app.route("/")
+@app.route("/dashboard")
 @login_required
 def dashboard():
-    lectures = []
-    conn = get_db()
-    lectures = conn.execute(
-        "SELECT * FROM lectures ORDER BY lecture_date DESC, lecture_time DESC LIMIT 10"
-    ).fetchall()
-    conn.close()
-    stats = fetch_dashboard_stats()
-    return render_template("dashboard.html", lectures=lectures, stats=stats)
+    with get_db() as conn:
+        stats = {
+            "total_students": conn.execute("SELECT COUNT(*) FROM students").fetchone()[0],
+            "total_lectures": conn.execute("SELECT COUNT(*) FROM lectures").fetchone()[0],
+            "total_attendance": conn.execute("SELECT COUNT(*) FROM attendance").fetchone()[0],
+        }
+        lectures = conn.execute("SELECT * FROM lectures ORDER BY lecture_date DESC, lecture_time DESC LIMIT 8").fetchall()
+    return render_template("dashboard.html", stats=stats, lectures=lectures)
 
 
 @app.route("/students", methods=["GET", "POST"])
@@ -234,130 +151,85 @@ def dashboard():
 def students():
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "create":
+        sid = request.form.get("student_id", type=int)
+        if action in ("create", "update"):
             name = (request.form.get("name") or "").strip()
-            student_number = (request.form.get("student_number") or "").strip()
-            grade_group = (request.form.get("grade_group") or "").strip()
-
-            if not all([name, student_number, grade_group]):
+            number = (request.form.get("student_number") or "").strip()
+            group = (request.form.get("grade_group") or "").strip()
+            if not all((name, number, group)):
                 flash("يرجى تعبئة جميع الحقول", "error")
-                return redirect(url_for("students"))
-
-            conn = get_db()
-            try:
-                conn.execute(
-                    "INSERT INTO students (student_number, name, grade_group) VALUES (?, ?, ?)",
-                    (student_number, name, grade_group),
-                )
-                conn.commit()
-                flash("تمت إضافة الطالب بنجاح", "success")
-            except sqlite3.IntegrityError:
-                flash("رقم الطالب موجود بالفعل", "error")
-            finally:
-                conn.close()
-            return redirect(url_for("students"))
-
-        if action == "update":
-            student_id = request.form.get("student_id")
-            name = (request.form.get("name") or "").strip()
-            student_number = (request.form.get("student_number") or "").strip()
-            grade_group = (request.form.get("grade_group") or "").strip()
-            if student_id and all([name, student_number, grade_group]):
-                conn = get_db()
-                conn.execute(
-                    "UPDATE students SET name = ?, student_number = ?, grade_group = ? WHERE id = ?",
-                    (name, student_number, grade_group, student_id),
-                )
-                conn.commit()
-                conn.close()
-                flash("تم تحديث بيانات الطالب", "success")
             else:
-                flash("بيانات غير مكتملة", "error")
-            return redirect(url_for("students"))
-
-        if action == "delete":
-            student_id = request.form.get("student_id")
-            if student_id:
-                conn = get_db()
-                conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
-                conn.commit()
-                conn.close()
-                flash("تم حذف الطالب", "success")
-            return redirect(url_for("students"))
-
-    conn = get_db()
-    students_list = conn.execute(
-        "SELECT * FROM students ORDER BY name ASC"
-    ).fetchall()
-    conn.close()
-    return render_template("students.html", students=students_list)
+                try:
+                    with get_db() as conn:
+                        if action == "create":
+                            conn.execute("INSERT INTO students(student_number,name,grade_group) VALUES(?,?,?)", (number,name,group))
+                            flash("تمت إضافة الطالب", "success")
+                        elif sid:
+                            conn.execute("UPDATE students SET student_number=?,name=?,grade_group=? WHERE id=?", (number,name,group,sid))
+                            old_qr = student_qr_path(sid)
+                            if old_qr.exists():
+                                old_qr.unlink()
+                            flash("تم تحديث بيانات الطالب", "success")
+                except sqlite3.IntegrityError:
+                    flash("رقم الطالب مستخدم بالفعل", "error")
+        elif action == "delete" and sid:
+            with get_db() as conn:
+                conn.execute("DELETE FROM students WHERE id=?", (sid,))
+            student_qr_path(sid).unlink(missing_ok=True)
+            flash("تم حذف الطالب", "success")
+        return redirect(url_for("students"))
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM students ORDER BY name").fetchall()
+    return render_template("students.html", students=rows)
 
 
 @app.route("/students/<int:student_id>/qr")
 @login_required
-def student_qr(student_id: int):
-    conn = get_db()
-    student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-    conn.close()
+def student_qr(student_id):
+    with get_db() as conn:
+        student = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     if not student:
-        flash("لم يتم العثور على الطالب", "error")
+        flash("الطالب غير موجود", "error")
         return redirect(url_for("students"))
-    qr_url = generate_student_qr(student["id"], student["student_number"])
-    return render_template("student_qr.html", student=student, qr_url=qr_url)
+    return render_template("student_qr.html", student=student, qr_url=generate_student_qr(student_id, student["student_number"]))
 
 
 @app.route("/students/<int:student_id>/download_qr")
 @login_required
-def download_qr(student_id: int):
-    conn = get_db()
-    student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
-    conn.close()
+def download_qr(student_id):
+    with get_db() as conn:
+        student = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     if not student:
-        flash("لم يتم العثور على الطالب", "error")
+        flash("الطالب غير موجود", "error")
         return redirect(url_for("students"))
-    qr_path = QR_DIR / f"{student_id}.png"
-    if not qr_path.exists():
-        generate_student_qr(student_id, student["student_number"])
-    return send_file(qr_path, mimetype="image/png", as_attachment=True, download_name=f"qr_{student['student_number']}.png")
+    generate_student_qr(student_id, student["student_number"])
+    return send_file(student_qr_path(student_id), as_attachment=True, download_name=f"qr_{student['student_number']}.png", mimetype="image/png")
 
 
 @app.route("/lectures", methods=["GET", "POST"])
 @login_required
 def lectures():
     if request.method == "POST":
-        name = (request.form.get("name") or "").strip()
-        lecture_date = (request.form.get("lecture_date") or "").strip()
-        lecture_time = (request.form.get("lecture_time") or "").strip()
-        if not all([name, lecture_date, lecture_time]):
-            flash("يرجى إدخال اسم المحاضرة والتاريخ والوقت", "error")
-            return redirect(url_for("lectures"))
-
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO lectures (name, lecture_date, lecture_time) VALUES (?, ?, ?)",
-            (name, lecture_date, lecture_time),
-        )
-        conn.commit()
-        conn.close()
-        flash("تم إنشاء المحاضرة بنجاح", "success")
+        values = [(request.form.get(k) or "").strip() for k in ("name", "lecture_date", "lecture_time")]
+        if not all(values):
+            flash("يرجى تعبئة اسم المحاضرة والتاريخ والوقت", "error")
+        else:
+            with get_db() as conn:
+                conn.execute("INSERT INTO lectures(name,lecture_date,lecture_time) VALUES(?,?,?)", values)
+            flash("تم إنشاء المحاضرة", "success")
         return redirect(url_for("lectures"))
-
-    conn = get_db()
-    lecture_list = conn.execute(
-        "SELECT * FROM lectures ORDER BY lecture_date DESC, lecture_time DESC"
-    ).fetchall()
-    conn.close()
-    return render_template("lectures.html", lectures=lecture_list)
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM lectures ORDER BY lecture_date DESC,lecture_time DESC").fetchall()
+    return render_template("lectures.html", lectures=rows)
 
 
 @app.route("/attendance/<int:lecture_id>")
 @login_required
-def attendance_page(lecture_id: int):
-    conn = get_db()
-    lecture = conn.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    conn.close()
+def attendance_page(lecture_id):
+    with get_db() as conn:
+        lecture = conn.execute("SELECT * FROM lectures WHERE id=?", (lecture_id,)).fetchone()
     if not lecture:
-        flash("لم يتم العثور على المحاضرة", "error")
+        flash("المحاضرة غير موجودة", "error")
         return redirect(url_for("lectures"))
     return render_template("attendance.html", lecture=lecture)
 
@@ -365,134 +237,64 @@ def attendance_page(lecture_id: int):
 @app.route("/api/scan", methods=["POST"])
 @login_required
 def api_scan():
-    payload = request.get_json(silent=True) or {}
-    lecture_id = payload.get("lecture_id")
-    qr_data = payload.get("qr_data")
-
-    if not lecture_id or not qr_data:
-        return jsonify({"success": False, "message": "بيانات المسح غير مكتملة"}), 400
-
-    student_number = parse_qr_payload(str(qr_data))
-    if not student_number:
-        return jsonify({"success": False, "message": "رمز QR غير صالح"}), 400
-
-    student = fetch_student_by_number(student_number)
-    if not student:
-        return jsonify({"success": False, "message": "الطالب غير موجود"}), 404
-
-    conn = get_db()
-    existing = conn.execute(
-        "SELECT * FROM attendance WHERE lecture_id = ? AND student_id = ?",
-        (lecture_id, student["id"]),
-    ).fetchone()
-    if existing:
-        conn.close()
-        return jsonify({"success": False, "message": f"{student['name']} تم تسجيله مسبقاً في هذه المحاضرة"}), 409
-
-    conn.execute(
-        "INSERT INTO attendance (lecture_id, student_id) VALUES (?, ?)",
-        (lecture_id, student["id"]),
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True, "message": f"تم تسجيل {student['name']} حضوراً"})
+    data = request.get_json(silent=True) or {}
+    lecture_id = data.get("lecture_id")
+    student_number = student_number_from_qr(str(data.get("qr_data") or ""))
+    if not isinstance(lecture_id, int) or not student_number:
+        return jsonify(success=False, message="رمز QR أو بيانات المحاضرة غير صالحة"), 400
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM lectures WHERE id=?", (lecture_id,)).fetchone():
+            return jsonify(success=False, message="المحاضرة غير موجودة"), 404
+        student = conn.execute("SELECT * FROM students WHERE student_number=?", (student_number,)).fetchone()
+        if not student:
+            return jsonify(success=False, message="الطالب غير موجود"), 404
+        try:
+            conn.execute("INSERT INTO attendance(lecture_id,student_id) VALUES(?,?)", (lecture_id, student["id"]))
+        except sqlite3.IntegrityError:
+            return jsonify(success=False, message=f"{student['name']} مسجل مسبقاً في هذه المحاضرة"), 409
+    return jsonify(success=True, message=f"تم تسجيل حضور {student['name']} بنجاح")
 
 
 @app.route("/reports")
 @login_required
 def reports():
     lecture_id = request.args.get("lecture_id", type=int)
-    conn = get_db()
-    lectures = conn.execute("SELECT * FROM lectures ORDER BY lecture_date DESC, lecture_time DESC").fetchall()
-    selected = None
-    present = []
-    absent = []
-    if lecture_id:
-        selected = conn.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-        if selected:
-            present = conn.execute(
-                """
-                SELECT s.*, a.checked_at
-                FROM attendance a
-                JOIN students s ON s.id = a.student_id
-                WHERE a.lecture_id = ?
-                ORDER BY s.name ASC
-                """,
-                (lecture_id,),
-            ).fetchall()
-            all_students = conn.execute("SELECT * FROM students ORDER BY name ASC").fetchall()
-            present_ids = {row["id"] for row in present}
-            absent = [s for s in all_students if s["id"] not in present_ids]
-    conn.close()
-    return render_template("reports.html", lectures=lectures, selected=selected, present=present, absent=absent)
+    with get_db() as conn:
+        lectures = conn.execute("SELECT * FROM lectures ORDER BY lecture_date DESC,lecture_time DESC").fetchall()
+        selected = conn.execute("SELECT * FROM lectures WHERE id=?", (lecture_id,)).fetchone() if lecture_id else None
+        present = conn.execute("SELECT s.*,a.checked_at FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.lecture_id=? ORDER BY s.name", (lecture_id,)).fetchall() if selected else []
+        all_students = conn.execute("SELECT * FROM students ORDER BY name").fetchall() if selected else []
+        counts = conn.execute("SELECT s.id,COUNT(a.id) AS attendance_count FROM students s LEFT JOIN attendance a ON a.student_id=s.id GROUP BY s.id").fetchall()
+    present_ids = {row["id"] for row in present}
+    absent = [row for row in all_students if row["id"] not in present_ids]
+    return render_template("reports.html", lectures=lectures, selected=selected, present=present, absent=absent, counts={row["id"]: row["attendance_count"] for row in counts})
 
 
 @app.route("/reports/export/<int:lecture_id>")
 @login_required
-def export_excel(lecture_id: int):
-    conn = get_db()
-    lecture = conn.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    if not lecture:
-        conn.close()
-        flash("لم يتم العثور على المحاضرة", "error")
-        return redirect(url_for("reports"))
-
-    present = conn.execute(
-        """
-        SELECT s.student_number, s.name, s.grade_group, a.checked_at
-        FROM attendance a
-        JOIN students s ON s.id = a.student_id
-        WHERE a.lecture_id = ?
-        ORDER BY s.name ASC
-        """,
-        (lecture_id,),
-    ).fetchall()
-    all_students = conn.execute("SELECT * FROM students ORDER BY name ASC").fetchall()
-    present_ids = {row["id"] for row in present}
-    absent = [s for s in all_students if s["id"] not in present_ids]
-    conn.close()
-
+def export_excel(lecture_id):
+    with get_db() as conn:
+        lecture = conn.execute("SELECT * FROM lectures WHERE id=?", (lecture_id,)).fetchone()
+        if not lecture:
+            flash("المحاضرة غير موجودة", "error")
+            return redirect(url_for("reports"))
+        students = conn.execute("SELECT s.student_number,s.name,s.grade_group,a.checked_at FROM students s LEFT JOIN attendance a ON a.student_id=s.id AND a.lecture_id=? ORDER BY s.name", (lecture_id,)).fetchall()
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "تقرير الحضور"
-    sheet["A1"] = "اسم المحاضرة"
-    sheet["B1"] = lecture["name"]
-    sheet["A2"] = "التاريخ"
-    sheet["B2"] = lecture["lecture_date"]
-    sheet["A3"] = "الوقت"
-    sheet["B3"] = lecture["lecture_time"]
-
-    sheet["A5"] = "رقم الطالب"
-    sheet["B5"] = "الاسم"
-    sheet["C5"] = "الصف / المجموعة"
-    sheet["D5"] = "الحالة"
-    sheet["E5"] = "تاريخ الحضور"
-
-    row_num = 6
-    for student in present:
-        sheet[f"A{row_num}"] = student["student_number"]
-        sheet[f"B{row_num}"] = student["name"]
-        sheet[f"C{row_num}"] = student["grade_group"]
-        sheet[f"D{row_num}"] = "حاضر"
-        sheet[f"E{row_num}"] = student["checked_at"]
-        row_num += 1
-
-    for student in absent:
-        sheet[f"A{row_num}"] = student["student_number"]
-        sheet[f"B{row_num}"] = student["name"]
-        sheet[f"C{row_num}"] = student["grade_group"]
-        sheet[f"D{row_num}"] = "غائب"
-        sheet[f"E{row_num}"] = "-"
-        row_num += 1
-
-    for column in ["A", "B", "C", "D", "E"]:
-        sheet.column_dimensions[column].width = 20
-
+    sheet.append(["اسم المحاضرة", lecture["name"]])
+    sheet.append(["التاريخ", lecture["lecture_date"], "الوقت", lecture["lecture_time"]])
+    sheet.append([])
+    sheet.append(["رقم الطالب", "الاسم", "الصف / المجموعة", "الحالة", "وقت التسجيل"])
+    for student in students:
+        sheet.append([student["student_number"], student["name"], student["grade_group"], "حاضر" if student["checked_at"] else "غائب", student["checked_at"] or "-"])
+    for column, width in {"A": 20, "B": 28, "C": 24, "D": 14, "E": 24}.items():
+        sheet.column_dimensions[column].width = width
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)
-    return send_file(output, as_attachment=True, download_name=f"report_{lecture_id}.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(output, as_attachment=True, download_name=f"attendance_{lecture_id}.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=os.getenv("FLASK_DEBUG") == "1")

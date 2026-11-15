@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}"><img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA"><span><b>IUA</b><small>الحضور الأكاديمي</small></span></a>
+    <nav><a class="nav-link active" href="{{ url_for('dashboard') }}">الرئيسية</a><a class="nav-link" href="{{ url_for('students') }}">إدارة الطلاب</a><a class="nav-link" href="{{ url_for('lectures') }}">المحاضرات</a><a class="nav-link" href="{{ url_for('reports') }}">تقارير الحضور</a></nav>
+    <form class="logout-form" method="post" action="{{ url_for('logout') }}"><button class="nav-link logout" type="submit">تسجيل الخروج</button></form>
+    <div class="sidebar-caption">جامعة أفريقيا الدولية</div>
+  </aside>
+  <main class="main-content">
+    <header class="topbar"><div><p class="eyebrow">مساحة الإدارة</p><h1>مرحباً بك</h1></div><div class="admin-chip">المدير · {{ session.get('username') }}</div></header>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+    <section class="stats-grid"><article class="stat-card"><span>إجمالي الطلاب</span><strong>{{ stats.total_students }}</strong><i>👥</i></article><article class="stat-card"><span>المحاضرات</span><strong>{{ stats.total_lectures }}</strong><i>📚</i></article><article class="stat-card"><span>تسجيلات الحضور</span><strong>{{ stats.total_attendance }}</strong><i>✓</i></article></section>
+    <section class="panel"><div class="panel-heading"><div><p class="eyebrow">نظرة عامة</p><h2>المحاضرات الأخيرة</h2></div><a class="button secondary" href="{{ url_for('lectures') }}">إدارة المحاضرات</a></div>
+      {% if lectures %}<div class="lecture-list">{% for lecture in lectures %}<article class="lecture-row"><div><strong>{{ lecture.name }}</strong><span>{{ lecture.lecture_date }} · {{ lecture.lecture_time }}</span></div><a class="button small primary" href="{{ url_for('attendance_page', lecture_id=lecture.id) }}">فتح المسح</a></article>{% endfor %}</div>{% else %}<div class="empty-state"><span>📋</span><h3>لا توجد محاضرات بعد</h3><p>أنشئ محاضرة لبدء تسجيل الحضور.</p><a class="button primary" href="{{ url_for('lectures') }}">إنشاء محاضرة</a></div>{% endif %}
+    </section>
+  </main>
+</div>
+{% endblock %}

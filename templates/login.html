@@ -1,39 +1,18 @@
 {% extends 'base.html' %}
-
 {% block content %}
 <div class="login-page">
-  <div class="login-card">
-    <div class="brand-wrap">
-      <img src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="IUA" class="brand-logo" />
-      <h1>نظام حضور الطلاب</h1>
-      <p>لوحة الإدارة</p>
-    </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <form method="post" class="auth-form">
-      <label>
-        <span>اسم المستخدم</span>
-        <input type="text" name="username" placeholder="admin" required />
-      </label>
-      <label>
-        <span>كلمة المرور</span>
-        <input type="password" name="password" placeholder="********" required />
-      </label>
-      <button type="submit">دخول</button>
+  <section class="login-card">
+    <img class="brand-logo" src="{{ url_for('static', filename='images/iua_logo.svg') }}" alt="شعار IUA" />
+    <p class="eyebrow">IUA · إدارة أكاديمية</p>
+    <h1>نظام حضور الطلاب</h1>
+    <p class="muted centered">سجّل الدخول لإدارة الطلاب والمحاضرات والحضور.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+    <form method="post" class="form-stack">
+      <label>اسم المستخدم<input name="username" autocomplete="username" required autofocus /></label>
+      <label>كلمة المرور<input type="password" name="password" autocomplete="current-password" required /></label>
+      <button class="button primary full" type="submit">تسجيل الدخول</button>
     </form>
-
-    <div class="login-note">
-      <strong>بيانات الدخول الافتراضية:</strong>
-      <div>المستخدم: admin</div>
-      <div>كلمة المرور: admin123</div>
-    </div>
-  </div>
+    <p class="login-help">بيانات التجربة المحلية: <code>admin</code> / <code>admin123</code></p>
+  </section>
 </div>
 {% endblock %}
