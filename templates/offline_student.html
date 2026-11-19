@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123658">
+  <title>توليد رمز الحضور | قسم الطالب</title>
+  {% if standalone %}
+  <style>{{ css | safe }}</style>
+  {% else %}
+  <link rel="manifest" href="/offline-assets/student.webmanifest">
+  <link rel="apple-touch-icon" href="/offline-assets/icon-192.png">
+  <link rel="icon" href="/offline-assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/offline-assets/app.css">
+  <script defer src="/offline-assets/vendor/qrcode.js"></script>
+  <script defer src="/offline-assets/qr-code.js"></script>
+  <script defer src="/offline-assets/student.js"></script>
+  {% endif %}
+</head>
+<body class="ticket-page">
+<main class="ticket">
+  <p class="eyebrow">دفتر الحضور · قسم الطالب</p>
+  {% if standalone %}<p class="pill" data-kind="success">هذه النسخة تعمل بلا إنترنت</p>
+  {% else %}<p class="pill" id="student-ready" role="status">جارٍ تجهيز العمل بلا اتصال…</p>{% endif %}
+  <h1>ولّد رمز حضورك</h1>
+  <p>أدخل الكود النصي الذي أعطاك إياه الليدر، ثم اعرض رمز QR على كاميرا هاتفه.</p>
+  <form id="student-code-form">
+    <label>كود الطالب<input class="code-input" id="student-token" dir="ltr" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX"></label>
+    <div class="actions"><button class="primary" type="submit">توليد رمز QR</button><button id="forget-code" type="button" hidden>مسح الكود من هذا الجهاز</button></div>
+  </form>
+  <div id="student-code" class="qr-card" aria-label="رمز الاستجابة السريعة الخاص بالطالب" hidden></div>
+  <p id="student-status" role="status" class="notice" hidden></p>
+  <p class="muted">لا تحتاج إلى حساب. لا تشارك كودك أو رمزك مع غير الليدر.</p>
+  {% if not standalone %}
+  <p id="student-offline-link" class="muted"><a href="/student-offline.html" download="iua-student-offline.html">حفظ قسم الطالب كملف يعمل دون إنترنت</a> · <a href="/">قسم الليدر</a></p>
+  {% endif %}
+  <noscript><p>فعّل JavaScript لعرض الرمز.</p></noscript>
+</main>
+{% if standalone %}
+{% for script in scripts %}<script>
+{{ script | safe }}
+</script>{% endfor %}
+{% endif %}
+</body>
+</html>
