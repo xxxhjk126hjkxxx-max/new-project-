@@ -1,0 +1,16 @@
+{
+  "id": "/student",
+  "name": "رمز الحضور · قسم الطالب",
+  "short_name": "رمز الحضور",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/student",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eff5f8",
+  "theme_color": "#123658",
+  "icons": [
+    {"src":"/offline-assets/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"/offline-assets/icon-512.png","sizes":"512x512","type":"image/png"}
+  ]
+}

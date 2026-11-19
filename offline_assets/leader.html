@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123658">
+  <title>دفتر الحضور | قسم الليدر</title>
+  <link rel="manifest" href="/offline-assets/manifest.webmanifest">
+  <link rel="icon" href="/offline-assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/offline-assets/icon-192.png">
+  <link rel="stylesheet" href="/offline-assets/app.css">
+  <script defer src="/offline-assets/vendor/jsqr.js"></script>
+  <script defer src="/offline-assets/qr-code.js"></script>
+  <script type="module" src="/offline-assets/leader.js"></script>
+</head>
+<body>
+<a class="skip" href="#workspace">انتقل إلى مساحة العمل</a>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/"><img src="/offline-assets/icon.svg" alt="" width="42" height="42"><span>دفتر الحضور<small>قسم الليدر</small></span></a>
+    <span id="offline-status" role="status" class="pill">جارٍ تجهيز وضع عدم الاتصال…</span>
+  </div>
+</header>
+<main class="wrap" id="workspace">
+  <section class="hero" aria-labelledby="hero-title">
+    <div><p class="eyebrow">جامعة أفريقيا الدولية · الحضور المحلي</p><h1 id="hero-title">سجّل الحضور من هاتفك</h1><p>أضف الطلاب، أرسل أكوادهم، ثم امسح رمز كل طالب. تبقى السجلات في هذا المتصفح.</p></div>
+    <div class="counters" aria-label="ملخص دفتر الحضور">
+      <div><strong id="student-count">٠</strong><span>طالب</span></div><div><strong id="lecture-count">٠</strong><span>محاضرة</span></div><div><strong id="attendance-count">٠</strong><span>تسجيل حضور</span></div>
+    </div>
+  </section>
+  <nav class="section-nav" aria-label="أقسام دفتر الحضور">
+    <button type="button" data-panel="students" aria-controls="students-panel" aria-current="true">الطلاب</button>
+    <button type="button" data-panel="lectures" aria-controls="lectures-panel">المحاضرات</button>
+    <button type="button" data-panel="scan" aria-controls="scan-panel">مسح الحضور</button>
+    <button type="button" data-panel="reports" aria-controls="reports-panel">التقارير</button>
+  </nav>
+  <p id="global-message" class="notice" role="status" hidden></p>
+  <noscript><p class="notice">فعّل JavaScript لتسجيل الحضور محلياً.</p></noscript>
+  <fieldset id="app-controls" class="app-controls" disabled>
+    <section id="students-panel" class="panel" aria-labelledby="students-title">
+      <div class="section-head"><p class="eyebrow">١ · التجهيز</p><h2 id="students-title">الطلاب وأكوادهم</h2><p>أضف الطالب ثم انسخ الكود النصي الخاص به وأرسله أو أعطه له مباشرة.</p></div>
+      <form id="student-form" class="form-row">
+        <label>الاسم<input name="name" required maxlength="100" placeholder="اسم الطالب"></label>
+        <label>الرقم الجامعي<input name="number" required maxlength="40" placeholder="مثال: 2026001" dir="auto" autocomplete="off"></label>
+        <label>المجموعة <span class="muted">(اختياري)</span><input name="group" maxlength="60" placeholder="مثال: المجموعة أ"></label>
+        <button type="submit" class="primary">إضافة طالب</button>
+      </form>
+      <p id="students-empty" class="empty">لم تُضف أي طالب بعد.</p>
+      <ul id="student-list" class="record-list" aria-label="الطلاب المسجلون"></ul>
+    </section>
+
+    <section id="lectures-panel" class="panel" aria-labelledby="lectures-title" hidden>
+      <div class="section-head"><p class="eyebrow">٢ · المحاضرات</p><h2 id="lectures-title">المحاضرات المحلية</h2><p>أنشئ محاضرة، ثم اخترها قبل مسح رموز الطلاب.</p></div>
+      <form id="lecture-form" class="form-row">
+        <label>اسم المحاضرة<input name="name" required maxlength="100" placeholder="مثال: قواعد البيانات"></label>
+        <label>التاريخ<input type="date" name="date" required></label>
+        <label>الوقت<input type="time" name="time" required></label>
+        <button type="submit" class="primary">إضافة محاضرة</button>
+      </form>
+      <p id="lectures-empty" class="empty">لم تُضف أي محاضرة بعد.</p>
+      <ul id="lecture-list" class="record-list" aria-label="المحاضرات المسجلة"></ul>
+    </section>
+
+    <section id="scan-panel" class="panel" aria-labelledby="scan-title" hidden>
+      <div class="section-head"><p class="eyebrow">٣ · تسجيل الحضور</p><h2 id="scan-title">امسح الرمز من هاتف الطالب</h2><p>اطلب من الطالب توليد الرمز على هاتفه، ووجّه كاميرا هاتف الليدر إلى الرمز الظاهر.</p></div>
+      <label class="narrow">المحاضرة<select id="scan-lecture"></select></label>
+      <div class="scanner" id="scanner-view" hidden><video id="camera" playsinline muted aria-label="معاينة كاميرا المسح"></video><div class="finder" aria-hidden="true"></div></div>
+      <div class="actions">
+        <button id="start-camera" type="button" class="primary">تشغيل الكاميرا</button>
+        <button id="stop-camera" type="button" hidden>إيقاف الكاميرا</button>
+        <button id="pick-qr" type="button">قراءة صورة رمز</button>
+        <input id="qr-image" type="file" accept="image/*" hidden aria-label="ملف صورة الرمز">
+      </div>
+      <p id="scan-message" class="notice" role="status">اختر المحاضرة لتبدأ المسح.</p>
+    </section>
+
+    <section id="reports-panel" class="panel" aria-labelledby="reports-title" hidden>
+      <div class="section-head"><p class="eyebrow">٤ · المراجعة</p><h2 id="reports-title">تقرير الحضور</h2><p>اطّلع على السجلات المحلية أو نزّل نسخة CSV.</p></div>
+      <div class="actions report-controls"><label class="narrow">المحاضرة<select id="report-lecture"></select></label><button id="export-report" type="button">تنزيل CSV</button></div>
+      <p id="reports-empty" class="empty">اختر محاضرة لعرض الحضور.</p>
+      <ul id="report-list" class="record-list" aria-label="حضور المحاضرة"></ul>
+    </section>
+  </fieldset>
+  <footer class="footnote"><div class="footer-links"><a href="/student">فتح قسم الطالب</a><a href="/student-offline.html" download="iua-student-offline.html">تنزيل صفحة الطالب للعمل بلا إنترنت</a></div>البيانات مرتبطة بهذا الجهاز والمتصفح وعنوان التطبيق. لا تستخدم التصفح الخاص، واحفظ تقاريرك قبل مسح بيانات الموقع.</footer>
+</main>
+<dialog id="invite-dialog" aria-labelledby="invite-title">
+  <div class="dialog-head"><p class="eyebrow">مشاركة مع الطالب</p><h2 id="invite-title">كود الطالب</h2><p id="invite-student"></p></div>
+  <label>الكود النصي<input id="invite-code" class="code-input" readonly dir="ltr"></label>
+  <div class="actions"><button id="copy-code" type="button" class="primary">نسخ الكود</button><button id="share-code" type="button" hidden>مشاركة الكود</button></div>
+  <div class="notice">الطالب يدخل هذا الكود في قسم الطالب ويعرض لك رمز QR. لا يحتاج إلى رابط خاص به.</div>
+  <p id="invite-message" role="status" class="muted"></p>
+  <form method="dialog" class="dialog-footer"><button>إغلاق</button></form>
+</dialog>
+</body>
+</html>

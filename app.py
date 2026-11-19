@@ -11,7 +11,10 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, sen
 from openpyxl import Workbook
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from offline_routes import offline
+
 app = Flask(__name__)
+app.register_blueprint(offline)
 app.config.update(
     SECRET_KEY=os.getenv("SECRET_KEY", "dev-only-change-this-secret"),
     SESSION_COOKIE_HTTPONLY=True,
@@ -101,12 +104,9 @@ def student_number_from_qr(payload: str) -> str | None:
 
 @app.before_request
 def bootstrap():
-    init_db()
-
-
-@app.route("/")
-def index():
-    return redirect(url_for("dashboard" if session.get("user_id") else "login"))
+    # Serving the offline app never opens the legacy server-side database.
+    if request.endpoint not in (None, "static") and request.blueprint != "offline":
+        init_db()
 
 
 @app.route("/login", methods=["GET", "POST"])
