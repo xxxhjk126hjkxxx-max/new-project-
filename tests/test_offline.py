@@ -7,6 +7,11 @@ from unittest.mock import patch
 import app
 
 
+def external_refs(html: str) -> list[str]:
+    refs = re.findall(r'<(?:link|script|img)\b[^>]*\b(?:src|href)\s*=\s*["\']([^"\']+)', html, re.IGNORECASE)
+    return [ref for ref in refs if not ref.startswith("data:")]
+
+
 class OfflineShellTest(unittest.TestCase):
     def setUp(self):
         folder = TemporaryDirectory()
@@ -17,28 +22,28 @@ class OfflineShellTest(unittest.TestCase):
         self.addCleanup(database_patch.stop)
         self.client = app.app.test_client()
 
-    def test_offline_shell_and_assets_do_not_open_legacy_database(self):
-        paths = (
-            "/", "/student", "/student-offline.html", "/sw.js",
-            *(f"/offline-assets/{asset}" for asset in (
-                "app.css", "leader.js", "student.js", "db.js", "qr-code.js",
-                "manifest.webmanifest", "student.webmanifest", "icon.svg",
-                "icon-192.png", "icon-512.png", "vendor/jsqr.js", "vendor/qrcode.js",
-            )),
-        )
-        for path in paths:
+    def test_single_file_apps_are_served_without_legacy_database(self):
+        for path in ("/", "/student", "/student-offline.html"):
             with self.subTest(path=path), self.client.get(path) as response:
                 self.assertEqual(response.status_code, 200)
         self.assertFalse(self.database.exists())
 
-    def test_standalone_page_inlines_every_dependency(self):
-        response = self.client.get("/student-offline.html")
-        html = response.get_data(as_text=True)
+    def test_leader_file_is_self_contained(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="student-form"', html)
+        self.assertIn("const AttendanceCode", html)
+        self.assertIn("function openDatabase", html)
+        self.assertEqual(external_refs(html), [])
+        self.assertNotIn("/offline-assets/", html)
+
+    def test_student_file_is_self_contained(self):
+        with self.client.get("/student") as response:
+            html = response.get_data(as_text=True)
         self.assertIn('id="student-token"', html)
         self.assertIn("const AttendanceCode", html)
         self.assertIn("var qrcode", html)
-        self.assertFalse(re.search(r'<(?:link|script|img)\b[^>]*\b(?:src|href)\s*=', html, re.IGNORECASE))
-        self.assertNotIn('/offline-assets/', html)
+        self.assertEqual(external_refs(html), [])
+        self.assertNotIn("/offline-assets/", html)
 
     def test_legacy_login_still_uses_legacy_database(self):
         self.assertEqual(self.client.get("/login").status_code, 200)

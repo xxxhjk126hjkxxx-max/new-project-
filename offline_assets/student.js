@@ -52,28 +52,4 @@
   let stored;
   try { stored = localStorage.getItem(key); } catch { /* Storage is optional. */ }
   if (stored) render(AttendanceCode.normalize(stored));
-
-  const ready = document.getElementById('student-ready');
-  if (!ready) return; // The standalone file is already offline-capable.
-  const worker = navigator.serviceWorker;
-  function showAvailability(available) {
-    ready.textContent = available ? 'جاهز للعمل بلا إنترنت' : 'لتعمل بلا اتصال، احفظ ملف قسم الطالب أدناه';
-    ready.dataset.kind = available ? 'success' : '';
-  }
-  if (!worker) {
-    showAvailability(false);
-    return;
-  }
-  const timer = setTimeout(() => showAvailability(!!worker.controller), 12000);
-  function checkAvailability() {
-    if (!worker.controller) return;
-    clearTimeout(timer);
-    showAvailability(true);
-  }
-  worker.addEventListener('controllerchange', checkAvailability);
-  checkAvailability();
-  worker.register('/sw.js').then(checkAvailability).catch(() => {
-    clearTimeout(timer);
-    showAvailability(!!worker.controller);
-  });
 })();

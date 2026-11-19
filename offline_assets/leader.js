@@ -29,30 +29,10 @@ function status(id, text, kind = '') {
 }
 
 function prepareOffline() {
-  if (!window.isSecureContext || !('serviceWorker' in navigator)) {
-    status('offline-status', 'استخدم HTTPS أو localhost لتفعيل الكاميرا والعمل بلا اتصال', 'error');
-    return;
-  }
-  const worker = navigator.serviceWorker;
-  let ready = false;
-  const timer = setTimeout(() => {
-    if (!ready) status('offline-status', 'لم يكتمل تجهيز التطبيق بلا اتصال', 'error');
-  }, 12000);
-  function update() {
-    if (worker.controller) {
-      ready = true;
-      clearTimeout(timer);
-      status('offline-status', 'جاهز للعمل بلا إنترنت', 'success');
-    }
-  }
-  worker.addEventListener('controllerchange', update);
-  update();
-  worker.register('/sw.js').then(update).catch(() => {
-    if (!ready) {
-      clearTimeout(timer);
-      status('offline-status', 'تعذّر تجهيز التطبيق بلا اتصال', 'error');
-    }
-  });
+  // The single-file app is fully self-contained: no network and no service
+  // worker are needed. The camera still requires a secure context, which is
+  // checked when the camera starts.
+  status('offline-status', 'جاهز للعمل بلا إنترنت', 'success');
 }
 
 function listItem(title, metadata, action, handle) {
